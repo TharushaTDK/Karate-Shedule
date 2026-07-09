@@ -14,6 +14,7 @@ export const LEAF_GAP = 12;
 export const COL_GAP = 60;
 export const MARGIN = 28;
 export const HEADER_H = 36;
+export const SIDE_PANEL_W = 230;
 
 export interface BracketBox {
   id: string;
@@ -173,7 +174,7 @@ export function generateBracket(numPlayersRaw: number): BracketLayout {
   });
 
   const boxes = columns.flat();
-  const width = champCol[0].x + BOX_WIDTH + MARGIN;
+  const width = champCol[0].x + BOX_WIDTH + SIDE_PANEL_W + MARGIN;
   const height =
     MARGIN * 2 + HEADER_H + size * BOX_HEIGHT + (size - 1) * LEAF_GAP;
 

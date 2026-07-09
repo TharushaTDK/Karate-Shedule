@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { MAX_PLAYERS, MIN_PLAYERS, nextPowerOfTwo } from "@/lib/bracket";
+import logo from "@/Assets/Logo.png";
 
 export interface SetupValues {
   title: string;
@@ -43,14 +44,23 @@ export default function SetupForm({ onSubmit }: SetupFormProps) {
   return (
     <div className="mx-auto flex min-h-[80vh] w-full max-w-xl flex-col justify-center px-4 py-16">
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl shadow-slate-900/5">
-        <div className="bg-gradient-to-r from-red-700 via-red-600 to-slate-900 px-8 py-7 text-white">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-red-100">
-            Kumite Draw Builder
-          </p>
-          <h1 className="mt-1 text-2xl font-bold">
-            Create a Karate Tournament Bracket
-          </h1>
-          <p className="mt-2 text-sm text-red-100/90">
+        <div className="bg-gradient-to-r from-red-700 via-red-600 to-slate-900 px-6 py-7 text-white sm:px-8">
+          <div className="flex items-start gap-4">
+            <img
+              src={logo.src}
+              alt="Club logo"
+              className="h-14 w-14 flex-shrink-0 object-contain sm:h-16 sm:w-16"
+            />
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-red-100">
+                Kumite Draw Builder
+              </p>
+              <h1 className="mt-1 text-xl font-bold sm:text-2xl">
+                Create a Karate Tournament Bracket
+              </h1>
+            </div>
+          </div>
+          <p className="mt-3 text-sm text-red-100/90">
             Enter the number of competitors and we&apos;ll generate the
             elimination sheet — ready for names and a one-page PDF export.
           </p>

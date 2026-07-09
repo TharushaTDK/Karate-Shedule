@@ -39,7 +39,10 @@ export async function exportElementsToPdf(
     }
     
     const x = (a4Width - renderWidth) / 2;
-    const y = (a4Height - renderHeight) / 2;
+    // Anchor to the top with a small safety margin instead of centering
+    // vertically, so pages with a wide aspect ratio don't get a large
+    // blank gap above the content.
+    const y = Math.max(0, Math.min(4, a4Height - renderHeight));
     
     if (i > 0) {
       pdf.addPage();
