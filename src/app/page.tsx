@@ -53,7 +53,7 @@ export default function Home() {
         {
           id: crypto.randomUUID(),
           title: lastBracket.title,
-          values: { ...lastBracket.values },
+          values: {}, // Do not duplicate data, provide empty template
         },
       ];
     });
