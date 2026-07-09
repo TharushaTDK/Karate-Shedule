@@ -1,36 +1,52 @@
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas-pro";
 
-/**
- * Renders an element to a canvas and drops it into a PDF whose page size
- * exactly matches the element's pixel dimensions. Because the page is
- * custom-sized to fit the content, the export is always a single page no
- * matter how large the bracket grows.
- */
-export async function exportElementToPdf(
-  element: HTMLElement,
+export async function exportElementsToPdf(
+  elements: HTMLElement[],
   filename: string
 ) {
-  const cssWidth = element.scrollWidth;
-  const cssHeight = element.scrollHeight;
-  const maxDim = Math.max(cssWidth, cssHeight);
-  const scale = maxDim > 3000 ? 1 : 2;
-
-  const canvas = await html2canvas(element, {
-    scale,
-    backgroundColor: "#ffffff",
-    useCORS: true,
-  });
-
-  const imgData = canvas.toDataURL("image/png");
-
   const pdf = new jsPDF({
-    orientation: cssWidth >= cssHeight ? "landscape" : "portrait",
-    unit: "px",
-    format: [cssWidth, cssHeight],
+    orientation: "landscape",
+    unit: "mm",
+    format: "a4",
     compress: true,
   });
 
-  pdf.addImage(imgData, "PNG", 0, 0, cssWidth, cssHeight, undefined, "FAST");
+  const a4Width = 297;
+  const a4Height = 210;
+
+  for (let i = 0; i < elements.length; i++) {
+    const element = elements[i];
+    
+    const canvas = await html2canvas(element, {
+      scale: 2,
+      backgroundColor: "#ffffff",
+      useCORS: true,
+    });
+    
+    const imgData = canvas.toDataURL("image/png");
+    
+    const imgRatio = canvas.width / canvas.height;
+    const pageRatio = a4Width / a4Height;
+    
+    let renderWidth = a4Width;
+    let renderHeight = a4Height;
+    
+    if (imgRatio > pageRatio) {
+      renderHeight = a4Width / imgRatio;
+    } else {
+      renderWidth = a4Height * imgRatio;
+    }
+    
+    const x = (a4Width - renderWidth) / 2;
+    const y = (a4Height - renderHeight) / 2;
+    
+    if (i > 0) {
+      pdf.addPage();
+    }
+    
+    pdf.addImage(imgData, "PNG", x, y, renderWidth, renderHeight, undefined, "FAST");
+  }
+  
   pdf.save(filename);
 }
