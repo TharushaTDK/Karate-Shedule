@@ -14,7 +14,17 @@ export const LEAF_GAP = 12;
 export const COL_GAP = 60;
 export const MARGIN = 28;
 export const HEADER_H = 36;
-export const SIDE_PANEL_W = 230;
+export const SIDE_PANEL_W = 280;
+
+// Results / referees side panel layout, shared between the layout size
+// calculation here and the rendering in BracketBoard so they can't drift.
+export const RESULT_PLACES = ["1st Place", "2nd Place", "3rd Place", "3rd Place"];
+export const RESULT_ROW_H = 28;
+export const RESULT_LABEL_W = 78;
+export const RESULTS_TOP_GAP = 60; // gap from champion box y to the results panel
+export const REFEREES_GAP = 50; // gap from bottom of results panel to referees panel
+export const REFEREE_ROW_H = 32;
+export const REFEREE_ROWS = 2;
 
 export interface BracketBox {
   id: string;
@@ -103,44 +113,32 @@ export function generateBracket(numPlayersRaw: number): BracketLayout {
   }));
   columns.push(leafCol);
 
+  // The final round always resolves to a single box (count === 1) — that
+  // box IS the champion, so it doubles as the trailing "Champion" column
+  // instead of adding a separate duplicate box after it.
   let prevYs = leafYs;
   for (let r = 1; r <= numRounds; r++) {
     const count = size / Math.pow(2, r);
+    const isChampionRound = r === numRounds;
     const ys: number[] = [];
     const col: BracketBox[] = [];
     for (let i = 0; i < count; i++) {
       const y = (prevYs[2 * i] + prevYs[2 * i + 1]) / 2;
       ys.push(y);
       col.push({
-        id: `r${r}-${i}`,
+        id: isChampionRound ? "champion" : `r${r}-${i}`,
         col: r,
         row: i,
         x: MARGIN + r * (BOX_WIDTH + COL_GAP),
         y,
         isBye: false,
-        isChampion: false,
+        isChampion: isChampionRound,
         isLeaf: false,
       });
     }
     columns.push(col);
     prevYs = ys;
   }
-
-  // Extra standalone "Champion" box mirroring the final match winner,
-  // matching the trailing box seen in the reference draw sheet.
-  const champCol: BracketBox[] = [
-    {
-      id: "champion",
-      col: numRounds + 1,
-      row: 0,
-      x: MARGIN + (numRounds + 1) * (BOX_WIDTH + COL_GAP),
-      y: prevYs[0],
-      isBye: false,
-      isChampion: true,
-      isLeaf: false,
-    },
-  ];
-  columns.push(champCol);
 
   const segments: Segment[] = [];
   for (let r = 0; r < numRounds; r++) {
@@ -163,20 +161,18 @@ export function generateBracket(numPlayersRaw: number): BracketLayout {
       segments.push({ x1: midX, y1: target.y, x2: target.x, y2: target.y });
     }
   }
-  // Stub connecting the final match box straight into the champion box.
-  const finalBox = columns[numRounds][0];
-  const champBox = columns[numRounds + 1][0];
-  segments.push({
-    x1: finalBox.x + BOX_WIDTH,
-    y1: finalBox.y,
-    x2: champBox.x,
-    y2: champBox.y,
-  });
 
   const boxes = columns.flat();
-  const width = champCol[0].x + BOX_WIDTH + SIDE_PANEL_W + MARGIN;
-  const height =
+  const champion = columns[numRounds][0];
+  const width = champion.x + BOX_WIDTH + SIDE_PANEL_W + MARGIN;
+
+  const treeHeight =
     MARGIN * 2 + HEADER_H + size * BOX_HEIGHT + (size - 1) * LEAF_GAP;
+  const resultsTop = champion.y + RESULTS_TOP_GAP;
+  const resultsHeight = RESULT_PLACES.length * RESULT_ROW_H;
+  const refereesBottom =
+    resultsTop + resultsHeight + REFEREES_GAP + REFEREE_ROWS * REFEREE_ROW_H;
+  const height = Math.max(treeHeight, refereesBottom + MARGIN);
 
   return {
     numPlayers,

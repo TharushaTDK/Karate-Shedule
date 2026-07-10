@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import SetupForm, { SetupValues } from "@/components/SetupForm";
+import AddPageModal from "@/components/AddPageModal";
 import BracketBoard from "@/components/BracketBoard";
 import { generateBracket } from "@/lib/bracket";
 import { exportElementsToPdf } from "@/lib/exportPdf";
@@ -12,6 +13,7 @@ type Stage = "setup" | "bracket";
 type BracketData = {
   id: string;
   title: string;
+  numPlayers: number;
   values: Record<string, string>;
 };
 
@@ -21,10 +23,10 @@ const ZOOM_STEP = 0.1;
 
 export default function Home() {
   const [stage, setStage] = useState<Stage>("setup");
-  const [numPlayers, setNumPlayers] = useState(16);
   const [brackets, setBrackets] = useState<BracketData[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [isAddPageOpen, setIsAddPageOpen] = useState(false);
 
   const exportRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
@@ -32,7 +34,7 @@ export default function Home() {
   const zoomRef = useRef(1);
   const autoFitRef = useRef(true);
 
-  const layout = useMemo(() => generateBracket(numPlayers), [numPlayers]);
+  const firstBracket = brackets[0];
 
   useEffect(() => {
     zoomRef.current = zoom;
@@ -68,7 +70,7 @@ export default function Home() {
     if (stage === "bracket") {
       fitToScreen();
     }
-  }, [stage, layout]);
+  }, [stage, firstBracket?.numPlayers]);
 
   useEffect(() => {
     if (stage !== "bracket") return;
@@ -87,8 +89,14 @@ export default function Home() {
   }, [stage]);
 
   function handleGenerate(setup: SetupValues) {
-    setNumPlayers(setup.numPlayers);
-    setBrackets([{ id: crypto.randomUUID(), title: setup.title, values: {} }]);
+    setBrackets([
+      {
+        id: crypto.randomUUID(),
+        title: setup.title,
+        numPlayers: setup.numPlayers,
+        values: {},
+      },
+    ]);
     setStage("bracket");
   }
 
@@ -106,19 +114,17 @@ export default function Home() {
     );
   }
 
-  function handleDuplicate() {
-    setBrackets((prev) => {
-      if (prev.length === 0) return prev;
-      const lastBracket = prev[prev.length - 1];
-      return [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          title: lastBracket.title,
-          values: {}, // Do not duplicate data, provide empty template
-        },
-      ];
-    });
+  function handleAddPage(setup: SetupValues) {
+    setBrackets((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        title: setup.title,
+        numPlayers: setup.numPlayers,
+        values: {},
+      },
+    ]);
+    setIsAddPageOpen(false);
   }
 
   function handleReset() {
@@ -192,20 +198,12 @@ export default function Home() {
             ← New Bracket
           </button>
           <button
-            onClick={handleDuplicate}
+            onClick={() => setIsAddPageOpen(true)}
             className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 sm:px-3 sm:py-2 sm:text-sm"
           >
             + Add Page
           </button>
           <div className="hidden text-sm text-slate-500 sm:block">
-            <span className="font-semibold text-slate-700">
-              {layout.numPlayers}
-            </span>{" "}
-            players &middot;{" "}
-            <span className="font-semibold text-slate-700">
-              {layout.size}
-            </span>{" "}
-            draw slots &middot;{" "}
             <span className="font-semibold text-slate-700">
               {brackets.length}
             </span>{" "}
@@ -254,7 +252,7 @@ export default function Home() {
               />
               <div className="p-6">
                 <BracketBoard
-                  layout={layout}
+                  layout={generateBracket(bracket.numPlayers)}
                   values={bracket.values}
                   onChange={(id, value) => handleValueChange(bracket.id, id, value)}
                 />
@@ -289,6 +287,15 @@ export default function Home() {
           </button>
         </div>
       </main>
+
+      {isAddPageOpen && (
+        <AddPageModal
+          defaultTitle={brackets[brackets.length - 1]?.title ?? ""}
+          defaultNumPlayers={brackets[brackets.length - 1]?.numPlayers ?? 16}
+          onCancel={() => setIsAddPageOpen(false)}
+          onSubmit={handleAddPage}
+        />
+      )}
     </div>
   );
 }
