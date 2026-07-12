@@ -1,9 +1,15 @@
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas-pro";
+import {
+  BracketPdfPage,
+  downloadBytes,
+  embedBracketData,
+} from "@/lib/pdfBracketData";
 
 export async function exportElementsToPdf(
   elements: HTMLElement[],
-  filename: string
+  filename: string,
+  brackets: BracketPdfPage[]
 ) {
   const pdf = new jsPDF({
     orientation: "landscape",
@@ -50,6 +56,11 @@ export async function exportElementsToPdf(
     
     pdf.addImage(imgData, "PNG", x, y, renderWidth, renderHeight, undefined, "FAST");
   }
-  
-  pdf.save(filename);
+
+  // Stash the original editable bracket data (titles, player counts, entered
+  // names) inside the PDF's metadata so it can be re-imported and edited
+  // again later, instead of just being a flat image.
+  const rawBytes = pdf.output("arraybuffer") as ArrayBuffer;
+  const bytesWithData = await embedBracketData(rawBytes, brackets);
+  downloadBytes(bytesWithData, filename, "application/pdf");
 }

@@ -4,11 +4,13 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import SetupForm, { SetupValues } from "@/components/SetupForm";
 import AddPageModal from "@/components/AddPageModal";
 import BracketBoard from "@/components/BracketBoard";
+import StartScreen from "@/components/StartScreen";
 import { generateBracket } from "@/lib/bracket";
 import { exportElementsToPdf } from "@/lib/exportPdf";
+import { extractBracketData } from "@/lib/pdfBracketData";
 import logo from "@/Assets/Logo.png";
 
-type Stage = "setup" | "bracket";
+type Stage = "start" | "setup" | "bracket";
 
 type BracketData = {
   id: string;
@@ -22,7 +24,7 @@ const MAX_ZOOM = 2;
 const ZOOM_STEP = 0.1;
 
 export default function Home() {
-  const [stage, setStage] = useState<Stage>("setup");
+  const [stage, setStage] = useState<Stage>("start");
   const [brackets, setBrackets] = useState<BracketData[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [zoom, setZoom] = useState(1);
@@ -33,6 +35,7 @@ export default function Home() {
   const firstPageRef = useRef<HTMLDivElement>(null);
   const zoomRef = useRef(1);
   const autoFitRef = useRef(true);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const firstBracket = brackets[0];
 
@@ -88,6 +91,52 @@ export default function Home() {
     };
   }, [stage]);
 
+  async function handleImportFile(file: File) {
+    const buffer = await file.arrayBuffer();
+    const imported = await extractBracketData(buffer);
+    if (!imported || imported.length === 0) {
+      throw new Error(
+        "This PDF doesn't contain editable bracket data. Only PDFs downloaded from this app can be re-imported."
+      );
+    }
+    setBrackets(
+      imported.map((page) => ({
+        id: crypto.randomUUID(),
+        title: page.title,
+        numPlayers: page.numPlayers,
+        values: page.values,
+      }))
+    );
+    setStage("bracket");
+  }
+
+  function handleImportClick() {
+    if (
+      brackets.length > 0 &&
+      !window.confirm(
+        "Importing a PDF will replace the pages you're currently editing. Continue?"
+      )
+    ) {
+      return;
+    }
+    importInputRef.current?.click();
+  }
+
+  async function handleImportInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      await handleImportFile(file);
+    } catch (err) {
+      window.alert(
+        err instanceof Error
+          ? err.message
+          : "Something went wrong while reading that PDF."
+      );
+    }
+  }
+
   function handleGenerate(setup: SetupValues) {
     setBrackets([
       {
@@ -139,7 +188,7 @@ export default function Home() {
     setBrackets((prev) => {
       const next = prev.filter((b) => b.id !== bracketId);
       if (next.length === 0) {
-        setStage("setup");
+        setStage("start");
       }
       return next;
     });
@@ -154,7 +203,7 @@ export default function Home() {
       return;
     }
     setBrackets([]);
-    setStage("setup");
+    setStage("start");
   }
 
   function handleZoomIn() {
@@ -191,7 +240,12 @@ export default function Home() {
         .toLowerCase()
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "")}.pdf`;
-      await exportElementsToPdf(elements, filename || "bracket.pdf");
+      const bracketData = brackets.map((b) => ({
+        title: b.title,
+        numPlayers: b.numPlayers,
+        values: b.values,
+      }));
+      await exportElementsToPdf(elements, filename || "bracket.pdf", bracketData);
     } catch (err) {
       console.error(err);
       window.alert("Something went wrong while generating the PDF.");
@@ -199,6 +253,15 @@ export default function Home() {
       setIsExporting(false);
       setZoom(previousZoom);
     }
+  }
+
+  if (stage === "start") {
+    return (
+      <StartScreen
+        onImport={handleImportFile}
+        onCreateNew={() => setStage("setup")}
+      />
+    );
   }
 
   if (stage === "setup") {
@@ -221,6 +284,19 @@ export default function Home() {
           >
             + Add Page
           </button>
+          <button
+            onClick={handleImportClick}
+            className="rounded-lg border border-slate-300 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 sm:px-3 sm:py-2 sm:text-sm"
+          >
+            Import PDF
+          </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/pdf,.pdf"
+            onChange={handleImportInputChange}
+            className="hidden"
+          />
           <div className="hidden text-sm text-slate-500 sm:block">
             <span className="font-semibold text-slate-700">
               {brackets.length}
