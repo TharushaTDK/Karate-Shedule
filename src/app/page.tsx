@@ -127,6 +127,24 @@ export default function Home() {
     setIsAddPageOpen(false);
   }
 
+  function handleDeletePage(bracketId: string) {
+    const bracket = brackets.find((b) => b.id === bracketId);
+    if (
+      !window.confirm(
+        `Delete "${bracket?.title || "this page"}"? This can't be undone.`
+      )
+    ) {
+      return;
+    }
+    setBrackets((prev) => {
+      const next = prev.filter((b) => b.id !== bracketId);
+      if (next.length === 0) {
+        setStage("setup");
+      }
+      return next;
+    });
+  }
+
   function handleReset() {
     if (
       !window.confirm(
@@ -231,18 +249,28 @@ export default function Home() {
               ref={index === 0 ? firstPageRef : undefined}
               className="bracket-page relative isolate inline-block min-w-full overflow-hidden shadow-[0_2px_10px_rgba(0,0,0,0.15),0_10px_30px_rgba(0,0,0,0.15)] sm:min-w-0 bg-white"
             >
-              <div className="border-b border-slate-400 bg-slate-300 px-4 py-2.5">
+              <div className="flex items-center gap-2 border-b border-slate-400 bg-slate-300 px-4 py-2.5">
                 {isExporting ? (
                   <div className="w-full bg-transparent text-left text-sm font-bold uppercase tracking-wide text-slate-800 sm:text-base py-[1px]">
                     {bracket.title || "Draw title"}
                   </div>
                 ) : (
-                  <input
-                    value={bracket.title}
-                    onChange={(e) => handleTitleChange(bracket.id, e.target.value)}
-                    placeholder="Draw title"
-                    className="w-full bg-transparent text-left text-sm font-bold uppercase tracking-wide text-slate-800 outline-none sm:text-base"
-                  />
+                  <>
+                    <input
+                      value={bracket.title}
+                      onChange={(e) => handleTitleChange(bracket.id, e.target.value)}
+                      placeholder="Draw title"
+                      className="w-full bg-transparent text-left text-sm font-bold uppercase tracking-wide text-slate-800 outline-none sm:text-base"
+                    />
+                    <button
+                      onClick={() => handleDeletePage(bracket.id)}
+                      title="Delete this page"
+                      aria-label="Delete this page"
+                      className="flex-shrink-0 rounded-md border border-slate-400 bg-white/70 px-2 py-1 text-xs font-medium text-slate-600 transition-colors hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+                    >
+                      Delete
+                    </button>
+                  </>
                 )}
               </div>
               <img
