@@ -5,6 +5,7 @@ import SetupForm, { SetupValues } from "@/components/SetupForm";
 import AddPageModal from "@/components/AddPageModal";
 import BracketBoard from "@/components/BracketBoard";
 import StartScreen from "@/components/StartScreen";
+import ToastContainer, { ToastItem } from "@/components/Toast";
 import { generateBracket } from "@/lib/bracket";
 import { exportElementsToPdf } from "@/lib/exportPdf";
 import { extractBracketData } from "@/lib/pdfBracketData";
@@ -29,6 +30,7 @@ export default function Home() {
   const [isExporting, setIsExporting] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [isAddPageOpen, setIsAddPageOpen] = useState(false);
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const exportRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
@@ -91,6 +93,16 @@ export default function Home() {
     };
   }, [stage]);
 
+  function dismissToast(id: string) {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }
+
+  function showToast(message: string, type: ToastItem["type"] = "success") {
+    const id = crypto.randomUUID();
+    setToasts((prev) => [...prev, { id, message, type }]);
+    setTimeout(() => dismissToast(id), 3500);
+  }
+
   async function handleImportFile(file: File) {
     const buffer = await file.arrayBuffer();
     const imported = await extractBracketData(buffer);
@@ -108,6 +120,11 @@ export default function Home() {
       }))
     );
     setStage("bracket");
+    showToast(
+      imported.length > 1
+        ? `PDF uploaded successfully — ${imported.length} pages restored`
+        : "PDF uploaded successfully — bracket restored"
+    );
   }
 
   function handleImportClick() {
@@ -129,10 +146,11 @@ export default function Home() {
     try {
       await handleImportFile(file);
     } catch (err) {
-      window.alert(
+      showToast(
         err instanceof Error
           ? err.message
-          : "Something went wrong while reading that PDF."
+          : "Something went wrong while reading that PDF.",
+        "error"
       );
     }
   }
@@ -147,6 +165,7 @@ export default function Home() {
       },
     ]);
     setStage("bracket");
+    showToast("Bracket created successfully");
   }
 
   function handleValueChange(bracketId: string, id: string, value: string) {
@@ -174,6 +193,7 @@ export default function Home() {
       },
     ]);
     setIsAddPageOpen(false);
+    showToast("Page added successfully");
   }
 
   function handleDeletePage(bracketId: string) {
@@ -192,6 +212,7 @@ export default function Home() {
       }
       return next;
     });
+    showToast("Page deleted");
   }
 
   function handleReset() {
@@ -246,30 +267,30 @@ export default function Home() {
         values: b.values,
       }));
       await exportElementsToPdf(elements, filename || "bracket.pdf", bracketData);
+      showToast("PDF downloaded successfully");
     } catch (err) {
       console.error(err);
-      window.alert("Something went wrong while generating the PDF.");
+      showToast("Something went wrong while generating the PDF.", "error");
     } finally {
       setIsExporting(false);
       setZoom(previousZoom);
     }
   }
 
+  let content;
+
   if (stage === "start") {
-    return (
+    content = (
       <StartScreen
         onImport={handleImportFile}
         onCreateNew={() => setStage("setup")}
       />
     );
-  }
-
-  if (stage === "setup") {
-    return <SetupForm onSubmit={handleGenerate} />;
-  }
-
-  return (
-    <div className="flex min-h-screen flex-col">
+  } else if (stage === "setup") {
+    content = <SetupForm onSubmit={handleGenerate} />;
+  } else {
+    content = (
+      <div className="flex min-h-screen flex-col">
       <header className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-white/90 px-3 py-2.5 backdrop-blur sm:gap-3 sm:px-8 sm:py-3">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <button
@@ -401,5 +422,13 @@ export default function Home() {
         />
       )}
     </div>
+    );
+  }
+
+  return (
+    <>
+      {content}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+    </>
   );
 }
