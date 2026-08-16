@@ -411,6 +411,7 @@ export default function Home() {
                   values={bracket.values}
                   onChange={(id, value) => handleValueChange(bracket.id, id, value)}
                   baseFontSize={fontSize}
+                  isExporting={isExporting}
                 />
               </div>
             </div>

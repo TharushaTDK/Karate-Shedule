@@ -24,6 +24,7 @@ interface BracketBoardProps {
   values: Record<string, string>;
   onChange: (id: string, value: string) => void;
   baseFontSize?: number;
+  isExporting?: boolean;
 }
 
 // Shrinks the font size as the typed name gets longer so it keeps fitting
@@ -44,7 +45,11 @@ const BOX_BORDER_X = 1;
 const BOX_BORDER_Y = 1;
 const AVAILABLE_TEXT_WIDTH = BOX_WIDTH - 2 * (BOX_PADDING_X + BOX_BORDER_X);
 const AVAILABLE_TEXT_HEIGHT = BOX_HEIGHT - 2 * (BOX_PADDING_Y + BOX_BORDER_Y);
-const LINE_HEIGHT_RATIO = 1.15;
+const LINE_HEIGHT_RATIO = 1.4;
+// Matches the ratio that was already rendering cleanly in html2canvas for a
+// single full-height box (38px box / ~13.5px font ≈ 2.8) — see
+// fitSingleLineFontSize.
+const EXPORT_SAFE_MAX_FONT_SIZE = BOX_HEIGHT / 2.8;
 
 let measureCtx: CanvasRenderingContext2D | null | undefined;
 let cachedFontFamily: string | undefined;
@@ -68,18 +73,27 @@ function measureTextWidth(text: string, fontPx: number): number {
   return measureCtx.measureText(text).width;
 }
 
-// Simulates greedy word-wrap at a given font size and returns how many
-// lines the text would occupy inside maxWidth. Words that are themselves
-// wider than the box (e.g. one long unbroken name) are hard-broken
-// character by character, matching how the box's `overflow-wrap: anywhere`
-// CSS will actually render it.
-function countWrappedLines(text: string, fontPx: number, maxWidth: number): number {
+// Simulates greedy word-wrap at a given font size and returns the actual
+// wrapped lines the live (CSS-wrapped) editor will show. Words that are
+// themselves wider than the box (e.g. one long unbroken name) are
+// hard-broken character by character, matching the box's `overflow-wrap:
+// anywhere` CSS. Used to decide how far fitFontSize needs to shrink text so
+// the wrapped block still fits the box height, and to size the live
+// EditableCell's centering padding.
+function wrapTextIntoLines(text: string, fontPx: number, maxWidth: number): string[] {
   const words = text.split(/\s+/).filter(Boolean);
-  if (words.length === 0) return 1;
+  if (words.length === 0) return [""];
 
   const spaceWidth = measureTextWidth(" ", fontPx);
-  let lines = 1;
+  const lines: string[] = [];
+  let current = "";
   let currentWidth = 0;
+
+  function flush() {
+    if (current) lines.push(current);
+    current = "";
+    currentWidth = 0;
+  }
 
   for (const word of words) {
     let remaining = word;
@@ -93,23 +107,30 @@ function countWrappedLines(text: string, fontPx: number, maxWidth: number): numb
       ) {
         fitLen--;
       }
+      flush();
+      lines.push(remaining.slice(0, fitLen));
       remaining = remaining.slice(fitLen);
-      lines++;
-      currentWidth = 0;
       wordWidth = measureTextWidth(remaining, fontPx);
     }
 
     const neededWidth =
       currentWidth === 0 ? wordWidth : currentWidth + spaceWidth + wordWidth;
     if (neededWidth <= maxWidth) {
+      current = currentWidth === 0 ? remaining : `${current} ${remaining}`;
       currentWidth = neededWidth;
     } else {
-      lines++;
+      flush();
+      current = remaining;
       currentWidth = wordWidth;
     }
   }
+  flush();
 
-  return lines;
+  return lines.length ? lines : [""];
+}
+
+function countWrappedLines(text: string, fontPx: number, maxWidth: number): number {
+  return wrapTextIntoLines(text, fontPx, maxWidth).length;
 }
 
 function fitFontSize(text: string, baseFontSize: number): number {
@@ -118,6 +139,26 @@ function fitFontSize(text: string, baseFontSize: number): number {
     const lines = countWrappedLines(text, size, AVAILABLE_TEXT_WIDTH);
     const totalHeight = lines * size * LINE_HEIGHT_RATIO;
     if (totalHeight <= AVAILABLE_TEXT_HEIGHT) {
+      return Math.round(size * 10) / 10;
+    }
+  }
+  return MIN_FONT_SIZE;
+}
+
+// Shrinks font size to keep text on a single unwrapped line — used for the
+// exported/static render, which (unlike the live editor) can't reliably
+// wrap text across multiple lines. See the comment where this is called.
+function fitSingleLineFontSize(text: string, baseFontSize: number): number {
+  // html2canvas centers the input's text vertically as roughly
+  // (boxHeight - fontSize) / 2 from the top, without reserving extra room
+  // for the font's ascent above that — so a font close to the box's full
+  // height clips its own ascenders/descenders. Capping how large the font
+  // is allowed to get (independent of the width-based shrinking below)
+  // keeps enough headroom regardless of the user's chosen base size.
+  const startSize = Math.min(baseFontSize, EXPORT_SAFE_MAX_FONT_SIZE);
+  if (!text) return startSize;
+  for (let size = startSize; size > MIN_FONT_SIZE; size -= 0.5) {
+    if (measureTextWidth(text, size) <= AVAILABLE_TEXT_WIDTH) {
       return Math.round(size * 10) / 10;
     }
   }
@@ -184,7 +225,7 @@ function EditableCell({ value, onChange, className, style }: EditableCellProps) 
 
 const BracketBoard = forwardRef<HTMLDivElement, BracketBoardProps>(
   function BracketBoard(
-    { layout, values, onChange, baseFontSize = DEFAULT_FONT_SIZE },
+    { layout, values, onChange, baseFontSize = DEFAULT_FONT_SIZE, isExporting = false },
     ref
   ) {
     const { columns, segments, width, height, numRounds } = layout;
@@ -236,17 +277,44 @@ const BracketBoard = forwardRef<HTMLDivElement, BracketBoardProps>(
           const fontSize = box.isBye
             ? baseFontSize
             : fitFontSize(value, baseFontSize);
-          const textStyle: CSSProperties = {
+          const lineHeightPx =
+            Math.round(fontSize * LINE_HEIGHT_RATIO * 100) / 100;
+          const staticLines = value
+            ? wrapTextIntoLines(value, fontSize, AVAILABLE_TEXT_WIDTH)
+            : [""];
+          const textBlockHeight = staticLines.length * lineHeightPx;
+          const centeringPaddingTop = Math.max(
+            0,
+            (AVAILABLE_TEXT_HEIGHT - textBlockHeight) / 2
+          );
+          // html2canvas (used for PDF export) only applies text-align and
+          // vertical centering to genuine <input>/<textarea> elements — a
+          // plain <div> (or contentEditable) is always painted flush
+          // top-left regardless of CSS, and its own multi-line wrapping is
+          // unreliable too. So for export we fall back to a single
+          // full-height <input readOnly>, matching how a single-line value
+          // already rendered correctly there, and just shrink the font
+          // enough to keep the (unwrapped) text on that one line — the
+          // wrapped multi-line view stays live-editor only, where the DOM
+          // renders it correctly already.
+          const exportFontSize = box.isBye
+            ? baseFontSize
+            : fitSingleLineFontSize(value, baseFontSize);
+          const editableTextStyle: CSSProperties = {
             fontSize,
-            lineHeight: LINE_HEIGHT_RATIO,
+            // A unitless line-height (e.g. "1.15") is real browsers' cue to
+            // scale it off the element's own font-size; kept explicit in px
+            // here too so the live view matches the export pixel-for-pixel.
+            lineHeight: `${lineHeightPx}px`,
             wordBreak: "break-word",
             overflowWrap: "anywhere",
+            paddingTop: centeringPaddingTop,
           };
           return (
             <div
               key={box.id}
               className={[
-                "absolute flex items-center justify-center overflow-hidden rounded-none border px-1.5 py-0.5 transition-colors",
+                "absolute rounded-none border transition-colors",
                 box.isChampion
                   ? "border-slate-600 bg-white text-slate-800 focus-within:border-slate-500 focus-within:ring-1 focus-within:ring-slate-400"
                   : box.isBye
@@ -260,19 +328,43 @@ const BracketBoard = forwardRef<HTMLDivElement, BracketBoardProps>(
                 top: box.y - BOX_HEIGHT / 2,
                 width: BOX_WIDTH,
                 height: BOX_HEIGHT,
+                boxSizing: "border-box",
+                overflow: "hidden",
+                paddingLeft: BOX_PADDING_X,
+                paddingRight: BOX_PADDING_X,
+                paddingBottom: BOX_PADDING_Y,
+                paddingTop: BOX_PADDING_Y,
+                textAlign: "center",
               }}
             >
-              {isEditable ? (
+              {isEditable && !isExporting ? (
                 <EditableCell
                   value={value}
                   onChange={(v) => onChange(box.id, v)}
-                  className="w-full cursor-text text-center outline-none"
-                  style={textStyle}
+                  className="w-full cursor-text outline-none"
+                  style={editableTextStyle}
                 />
               ) : (
-                <div className="w-full text-center" style={textStyle}>
-                  {value}
-                </div>
+                <input
+                  readOnly
+                  tabIndex={-1}
+                  value={value || " "}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    height: "100%",
+                    fontSize: exportFontSize,
+                    fontFamily: "inherit",
+                    color: "inherit",
+                    textAlign: "center",
+                    border: "none",
+                    outline: "none",
+                    background: "transparent",
+                    padding: 0,
+                    margin: 0,
+                    pointerEvents: "none",
+                  }}
+                />
               )}
             </div>
           );
