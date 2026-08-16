@@ -22,13 +22,18 @@ interface BracketBoardProps {
   layout: BracketLayout;
   values: Record<string, string>;
   onChange: (id: string, value: string) => void;
+  baseFontSize?: number;
 }
 
 // Shrinks the font size as the typed name gets longer so it keeps fitting
 // on one line inside the fixed-width box instead of being clipped. Uses an
 // offscreen canvas to measure the actual rendered text width rather than a
 // character-count guess, so it fits precisely down to the readability floor.
-const BASE_FONT_SIZE = 13;
+// The starting point (baseFontSize) is user-adjustable via the toolbar
+// dropdown; this just keeps long names from overflowing that chosen size.
+export const DEFAULT_FONT_SIZE = 13;
+export const MIN_FONT_SIZE_OPTION = 8;
+export const MAX_FONT_SIZE_OPTION = 20;
 const MIN_FONT_SIZE = 7;
 const BOX_PADDING_X = 6; // matches the input's px-1.5
 const BOX_BORDER_X = 1;
@@ -56,16 +61,19 @@ function measureTextWidth(text: string, fontPx: number): number {
   return measureCtx.measureText(text).width;
 }
 
-function fitFontSize(text: string): number {
-  if (!text) return BASE_FONT_SIZE;
-  const widthAtBase = measureTextWidth(text, BASE_FONT_SIZE);
-  if (widthAtBase <= 0 || widthAtBase <= AVAILABLE_TEXT_WIDTH) return BASE_FONT_SIZE;
-  const scaled = (AVAILABLE_TEXT_WIDTH / widthAtBase) * BASE_FONT_SIZE;
+function fitFontSize(text: string, baseFontSize: number): number {
+  if (!text) return baseFontSize;
+  const widthAtBase = measureTextWidth(text, baseFontSize);
+  if (widthAtBase <= 0 || widthAtBase <= AVAILABLE_TEXT_WIDTH) return baseFontSize;
+  const scaled = (AVAILABLE_TEXT_WIDTH / widthAtBase) * baseFontSize;
   return Math.max(MIN_FONT_SIZE, Math.floor(scaled * 10) / 10);
 }
 
 const BracketBoard = forwardRef<HTMLDivElement, BracketBoardProps>(
-  function BracketBoard({ layout, values, onChange }, ref) {
+  function BracketBoard(
+    { layout, values, onChange, baseFontSize = DEFAULT_FONT_SIZE },
+    ref
+  ) {
     const { columns, segments, width, height, numRounds } = layout;
 
     return (
@@ -112,6 +120,9 @@ const BracketBoard = forwardRef<HTMLDivElement, BracketBoardProps>(
           const isEditable = !box.isBye;
           const value = values[box.id] ?? (box.isBye ? "BYE" : "");
           const isRedRow = box.row % 2 === 0;
+          const fontSize = box.isBye
+            ? baseFontSize
+            : fitFontSize(value, baseFontSize);
           return (
             <div
               key={box.id}
@@ -128,10 +139,9 @@ const BracketBoard = forwardRef<HTMLDivElement, BracketBoardProps>(
                 disabled={!isEditable}
                 value={value}
                 onChange={(e) => onChange(box.id, e.target.value)}
-                style={{ fontSize: box.isBye ? undefined : fitFontSize(value) }}
+                style={{ fontSize }}
                 className={[
                   "h-full w-full rounded-none border px-1.5 outline-none transition-colors",
-                  box.isBye ? "text-[13px]" : "",
                   box.isChampion
                     ? "border-slate-600 bg-white text-slate-800 focus:border-slate-500 focus:ring-1 focus:ring-slate-400"
                     : box.isBye

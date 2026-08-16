@@ -3,7 +3,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import SetupForm, { SetupValues } from "@/components/SetupForm";
 import AddPageModal from "@/components/AddPageModal";
-import BracketBoard from "@/components/BracketBoard";
+import BracketBoard, {
+  DEFAULT_FONT_SIZE,
+  MAX_FONT_SIZE_OPTION,
+  MIN_FONT_SIZE_OPTION,
+} from "@/components/BracketBoard";
 import StartScreen from "@/components/StartScreen";
 import ToastContainer, { ToastItem } from "@/components/Toast";
 import { generateBracket } from "@/lib/bracket";
@@ -24,11 +28,17 @@ const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 2;
 const ZOOM_STEP = 0.1;
 
+const FONT_SIZE_OPTIONS = Array.from(
+  { length: MAX_FONT_SIZE_OPTION - MIN_FONT_SIZE_OPTION + 1 },
+  (_, i) => MIN_FONT_SIZE_OPTION + i
+);
+
 export default function Home() {
   const [stage, setStage] = useState<Stage>("start");
   const [brackets, setBrackets] = useState<BracketData[]>([]);
   const [isExporting, setIsExporting] = useState(false);
   const [zoom, setZoom] = useState(1);
+  const [fontSize, setFontSize] = useState(DEFAULT_FONT_SIZE);
   const [isAddPageOpen, setIsAddPageOpen] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
@@ -324,6 +334,26 @@ export default function Home() {
             </span>{" "}
             pages
           </div>
+          <div className="flex items-center gap-1.5">
+            <label
+              htmlFor="font-size-select"
+              className="hidden text-xs font-medium text-slate-500 sm:inline"
+            >
+              Font size
+            </label>
+            <select
+              id="font-size-select"
+              value={fontSize}
+              onChange={(e) => setFontSize(Number(e.target.value))}
+              className="rounded-lg border border-slate-300 px-2 py-1.5 text-xs font-medium text-slate-600 outline-none transition-colors hover:bg-slate-100 sm:px-3 sm:py-2 sm:text-sm"
+            >
+              {FONT_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {size}px
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <button
           onClick={handleDownload}
@@ -380,6 +410,7 @@ export default function Home() {
                   layout={generateBracket(bracket.numPlayers)}
                   values={bracket.values}
                   onChange={(id, value) => handleValueChange(bracket.id, id, value)}
+                  baseFontSize={fontSize}
                 />
               </div>
             </div>
